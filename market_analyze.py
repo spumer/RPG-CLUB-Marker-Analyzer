@@ -10,6 +10,7 @@
 
 
 import re
+import datetime
 import collections
 import urllib.error
 import urllib.request
@@ -83,7 +84,8 @@ def tag_split(txt):
 
 
 class Trade:
-	def __init__(self, owner_name, city, item_name, count, cost, packet=False):
+	def __init__(self, create_date, owner_name, city, item_name, count, cost, packet=False):
+		self.create_date = create_date
 		self.owner_name = owner_name
 		self.city = city
 		self.item_name = item_name
@@ -99,9 +101,22 @@ class Trade:
 			self.cost
 		)
 
+	@staticmethod
+	def _extract_date(
+		txt,
+		_rdate=re.compile(r'\d+/\d+/\d+ \d+:\d+:\d+\s*\w{2}', flags=re.IGNORECASE)
+	):
+		mo = _rdate.search(txt)
+		if mo:
+			return datetime.datetime.strptime(mo.group(0), '%m/%d/%Y %H:%M:%S %p')
+
+		return None
+
 	@classmethod
 	def from_table_row(cls, row):
-		_, owner_city, _, item_name_ru_en, _, count, _, cost = _ritems.findall(row)
+		create_date, owner_city, _, item_name_ru_en, _, count, _, cost = _ritems.findall(row)
+
+		create_date = cls._extract_date(create_date)
 
 		owner_name, city = tag_split(owner_city)
 		owner_name = owner_name.strip()
@@ -126,7 +141,7 @@ class Trade:
 			print(item_name_ru_en)
 			raise
 
-		return cls(owner_name, city, item_name_en, count, cost, packet)
+		return cls(create_date, owner_name, city, item_name_en, count, cost, packet)
 
 
 def download_actual_demands():
