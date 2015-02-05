@@ -5,11 +5,24 @@ import re
 import sqlite3
 import datetime
 import itertools
+import http.client
 import urllib.error
 import urllib.request
 
 from contextlib import closing
 from contextlib import contextmanager
+
+
+class OwnerCitySplitError(Exception):
+    pass
+
+
+class ItemNameSplitError(Exception):
+    pass
+
+
+class EmptyCountError(Exception):
+    pass
 
 
 SQLITE_EXEC_ARG_LIMIT = 999
@@ -101,9 +114,12 @@ class Trade:
         img_id = cls._extract_img_id(img_tag)
         date = cls._extract_date(date)
 
-        owner_name, city = tag_split(owner_city)
-        owner_name = _rbulk.sub('', owner_name)
-        owner_name = owner_name.strip()
+        try:
+            owner_name, city = tag_split(owner_city)
+            owner_name = _rbulk.sub('', owner_name)
+            owner_name = owner_name.strip()
+        except ValueError as exc:
+            raise OwnerCitySplitError from exc
 
         bulk = '*' in cost
 
@@ -121,9 +137,11 @@ class Trade:
                 item_name_en, item_name_ru = name_parts
             else:
                 item_name_en = item_name_ru = name_parts[0]
-        except ValueError:
-            print(item_name_ru_en)
-            raise
+        except ValueError as exc:
+            raise ItemNameSplitError from exc
+
+        if not count.isdigit():
+            raise EmptyCountError
 
         return cls(date, owner_name, city, item_name_en, int(count), int(cost), img_id, bulk)
 
@@ -146,8 +164,8 @@ class TradeList:
     def _read_page(addr, retry=3):
         while True:
             try:
-                resp = urllib.request.urlopen(addr)
-            except urllib.error.HTTPError as exc:
+                resp = urllib.request.urlopen(addr, timeout=60)
+            except (urllib.error.HTTPError, http.client.HTTPException) as exc:
                 retry -= 1
                 if not retry:
                     raise
@@ -166,13 +184,20 @@ class TradeList:
         trades = {}
 
         for mo in _rrows.finditer(page):
-            if 'list00' in mo.group(0):
+            mo_value = mo.group(0)
+            if 'list00' in mo_value:
                 continue
 
             try:
-                trade = Trade.from_table_row(mo.group(0))
+                trade = Trade.from_table_row(mo_value)
+            except (OwnerCitySplitError, ItemNameSplitError, EmptyCountError):
+                # Temporary errors
+                continue
             except ValueError as exc:
-                print("Error: %r" % exc)
+                print("Error: %r, data: %r" % (exc, mo_value))
+                continue
+
+            if trade.cost <= 0:
                 continue
 
             if trade in trades:

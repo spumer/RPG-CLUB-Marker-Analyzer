@@ -10,7 +10,6 @@ import market
 import analyze
 
 
-NEW_DATA_AVAILABLE = True
 SHARED_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 
 
@@ -22,30 +21,31 @@ def log_future_exception(future):
 
 @asyncio.coroutine
 def update_market(loop=None):
-    global NEW_DATA_AVAILABLE
-
     if loop is None:
         loop = asyncio.get_event_loop()
 
     while True:
-        trades = yield from loop.run_in_executor(SHARED_EXECUTOR, market.get_trades, True)
-        if trades.write(latest=True):
-            NEW_DATA_AVAILABLE = True
+        try:
+            trades = yield from asyncio.wait_for(
+                loop.run_in_executor(SHARED_EXECUTOR, market.get_trades, True),
+                timeout=120
+            )
+            trades.write(latest=True)
 
-        yield from asyncio.sleep(120, loop=loop)
+            yield from asyncio.sleep(120, loop=loop)
+        except asyncio.TimeoutError:
+            print("TimeoutError occured. Try again!")
+        except Exception as exc:
+            print("Unhandled exception occured: %r" % exc)
+            print("Sleep...")
+            asyncio.sleep(10, loop=loop)
+            print("Wake up!")
 
 
-_dupes = []
 @asyncio.coroutine
 def dupe(request):
-    global _dupes
-    global NEW_DATA_AVAILABLE
-
-    if NEW_DATA_AVAILABLE:
-        _dupes = analyze.get_dupes()
-        NEW_DATA_AVAILABLE = False
-
-    body = json.dumps([d.to_dict() for d in _dupes]).encode()
+    dupes = analyze.get_dupes()
+    body = json.dumps([d.to_dict() for d in dupes]).encode()
     return web.Response(body=body)
 
 
