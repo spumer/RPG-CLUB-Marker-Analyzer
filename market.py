@@ -21,11 +21,10 @@ class ItemNameSplitError(Exception):
     pass
 
 
-class EmptyCountError(Exception):
+class EmptyAmountError(Exception):
     pass
 
 
-SQLITE_EXEC_ARG_LIMIT = 999
 SQLITE_DB_FILENAME = 'market_history.db'
 
 _rbulk = re.compile(r'\s\*$')
@@ -45,14 +44,14 @@ def tag_split(txt):
 
 
 class Trade:
-    def __init__(self, date, owner_name, city, item_name, count, cost, img_id=None, bulk=False):
+    def __init__(self, date, owner_name, city, item_name, count, cost, item_id=None, bulk=False):
         self.date = date
         self.owner_name = owner_name
         self.city = city
         self.item_name = item_name
         self.count = count
         self.cost = cost
-        self.img_id = img_id
+        self.item_id = item_id
         self.bulk = bulk
 
     def __repr__(self):
@@ -72,7 +71,7 @@ class Trade:
         if not isinstance(other, Trade):
             return False
 
-        for attr in ('date', 'owner_name', 'city', 'item_name', 'cost', 'bulk'):
+        for attr in ('date', 'owner_name', 'city', 'item_name', 'cost', 'item_id', 'bulk'):
             if getattr(self, attr) != getattr(other, attr):
                 return False
 
@@ -85,11 +84,12 @@ class Trade:
             + hash(self.city)
             + hash(self.item_name)
             + hash(self.cost)
+            + hash(self.item_id)
             + hash(self.bulk)
         )
 
     @staticmethod
-    def _extract_img_id(tag, _rsrc=re.compile(r'src="[^"]*?(\d+)[^"]*?"')):
+    def _extract_item_id(tag, _rsrc=re.compile(r'src="[^"]*?(\d+)[^"]*?"')):
         mo = _rsrc.search(tag)
         if mo:
             return int(mo.group(1))
@@ -111,7 +111,7 @@ class Trade:
     def from_table_row(cls, row):
         date, owner_city, img_tag, item_name_ru_en, _, count, _, cost = _ritems.findall(row)
 
-        img_id = cls._extract_img_id(img_tag)
+        item_id = cls._extract_item_id(img_tag)
         date = cls._extract_date(date)
 
         try:
@@ -126,7 +126,17 @@ class Trade:
         cost = cost.replace('.', '')
         cost = _rbulk.sub('', cost)
 
+        if not count.isdigit() or not cost.isdigit():
+            raise EmptyAmountError
+
         name_parts = tag_split(item_name_ru_en)
+
+        if 'dye' in item_name_ru_en.lower():
+            # mods: ['Str+1', 'Con-1', 'СИЛ+1', 'ВЫН-1']
+            mods = re.findall(r'\w{3}[-\+]\d', item_name_ru_en)
+            if mods:
+                name_parts.append('[%s]' % ' '.join(mods[:2]))
+
         try:
             if len(name_parts) > 2:
                 # example:  ['Baby Kookaburra Ocarina', 'Окарина Детеныша Кукабарры', '+63']
@@ -140,10 +150,11 @@ class Trade:
         except ValueError as exc:
             raise ItemNameSplitError from exc
 
-        if not count.isdigit():
-            raise EmptyCountError
+        # example: ['none', 'Тиара Снежной Королевы']
+        if item_name_en.lower() == 'none' and item_name_ru:
+            item_name_en = item_name_ru
 
-        return cls(date, owner_name, city, item_name_en, int(count), int(cost), img_id, bulk)
+        return cls(date, owner_name, city, item_name_en, int(count), int(cost), item_id, bulk)
 
 
 class TradeList:
@@ -190,14 +201,14 @@ class TradeList:
 
             try:
                 trade = Trade.from_table_row(mo_value)
-            except (OwnerCitySplitError, ItemNameSplitError, EmptyCountError):
+            except (OwnerCitySplitError, ItemNameSplitError, EmptyAmountError):
                 # Temporary errors
                 continue
             except ValueError as exc:
                 print("Error: %r, data: %r" % (exc, mo_value))
                 continue
 
-            if trade.cost <= 0:
+            if trade.cost <= 0 or trade.count <= 0:
                 continue
 
             if trade in trades:
@@ -249,7 +260,7 @@ class TradeList:
                         t.date,
                         type_,
                         latest,
-                        t.img_id,
+                        t.item_id,
                     ))
 
             if not new_trades:
@@ -266,7 +277,7 @@ class TradeList:
             cur.executemany(
                 '''
                 INSERT INTO trades (
-                    `item_name`, `owner_name`, `count`, `cost`, `city`, `date`, `type`, `latest`, `img_id`
+                    `item_name`, `owner_name`, `count`, `cost`, `city`, `date`, `type`, `latest`, `item_id`
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
@@ -287,7 +298,7 @@ class TradeList:
                 `city`,
                 `type`,
                 `date` as "[timestamp]",
-                `img_id`
+                `item_id`
             FROM
                 `trades`
             '''
@@ -301,8 +312,8 @@ class TradeList:
             demands = []
             offers = []
             for row in cur:
-                item_name, owner_name, count, cost, city, type_, date, img_id = row
-                trade = Trade(date, owner_name, city, item_name, count, cost, img_id=img_id)
+                item_name, owner_name, count, cost, city, type_, date, item_id = row
+                trade = Trade(date, owner_name, city, item_name, count, cost, item_id=item_id)
 
                 if type_ == 1:
                     demands.append(trade)
@@ -342,17 +353,17 @@ def sqlite_init_trades(filename=SQLITE_DB_FILENAME):
         cur = conn.cursor()
         cur.execute(
             '''
-            CREATE TABLE IF NOT EXISTS `trades` (
-                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            CREATE TABLE "trades" (
+                `id`    INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 `item_name` VARCHAR,
-                `owner_name` VARCHAR,
-                `count` INTEGER,
-                `cost` INTEGER,
-                `city` VARCHAR,
-                `type` INTEGER,  -- 1 - demand, 2 - offer
-                `date` DATETIME,
-                `latest` BOOLEAN DEFAULT 0,
-                `img_id` INTEGER
+                `owner_name`    VARCHAR,
+                `count` INTEGER CHECK (`count` > 0),
+                `cost`  INTEGER CHECK (`cost` > 0),
+                `city`  VARCHAR,
+                `type`  INTEGER CHECK (`type` IN (1, 2)),  -- 1 demand (buy), 2 -- offer (sell)
+                `date`  DATETIME,
+                `latest`    BOOLEAN DEFAULT 0,
+                `item_id`   INTEGER
             )
             '''
         )

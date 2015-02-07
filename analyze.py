@@ -5,7 +5,7 @@ import collections
 import market
 
 
-IMG_BASE_URL = 'http://market.bot.rpg-club.com/img/%(img_id)s.png'
+IMG_BASE_URL = 'http://market.bot.rpg-club.com/img/%(item_id)s.png'
 
 
 class Dupe:
@@ -25,7 +25,7 @@ class Dupe:
          'equity': self.equity,
          'buy_count': self.buy_count,
          'required_aden': self.buy_count * self.offer.cost,
-         'img_url': None if self.offer.img_id is None else IMG_BASE_URL % {'img_id': self.offer.img_id},
+         'img_url': None if self.offer.item_id is None else IMG_BASE_URL % {'item_id': self.offer.item_id},
          'seller': {
             'name': self.offer.owner_name,
             'city': self.offer.city,
