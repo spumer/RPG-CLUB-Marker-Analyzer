@@ -38,7 +38,7 @@ def update_market(loop=None):
         except Exception as exc:
             print("Unhandled exception occured: %r" % exc)
             print("Sleep...")
-            asyncio.sleep(10, loop=loop)
+            yield from asyncio.sleep(10, loop=loop)
             print("Wake up!")
 
 

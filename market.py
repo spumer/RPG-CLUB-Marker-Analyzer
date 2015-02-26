@@ -28,15 +28,10 @@ class EmptyAmountError(Exception):
 SQLITE_DB_FILENAME = 'market_history.db'
 
 _rbulk = re.compile(r'\s\*$')
-_rtag = re.compile(r'</?\w+[^>]*>*')
+_rtag = re.compile(r'</?\w+[^>]*>')
 
 _rrows = re.compile(r'<tr[^>]*>\s*(?:<td[^>]*>.*?</td>\s*){8}', flags=re.IGNORECASE)
 _ritems = re.compile(r'<td[^>]*>\s*(.*?)\s*</td>', flags=re.IGNORECASE)
-
-
-def take(iterable, n):
-    """Return first n items of the iterable as a list"""
-    return list(itertools.islice(iterable, n))
 
 
 def tag_split(txt):
@@ -44,26 +39,32 @@ def tag_split(txt):
 
 
 class Trade:
-    def __init__(self, date, owner_name, city, item_name, count, cost, item_id=None, bulk=False):
+    def __init__(self, date, owner_name, city, item_name, mod, count, cost, item_id=None, bulk=False):
         self.date = date
         self.owner_name = owner_name
         self.city = city
-        self.item_name = item_name
+        self._item_name = item_name
+        self.mod = mod
         self.count = count
         self.cost = cost
         self.item_id = item_id
         self.bulk = bulk
 
+    @property
+    def item_name(self):
+        return self._item_name + self.mod
+
     def __repr__(self):
         return (
             'Item: {item_name}, Owner: {owner_name}, City: {city}, Date: {date}, '
-            'Count: {count}, Cost: {cost}'.format(
+            'Count: {count}, Cost: {cost}, ID: {item_id}'.format(
                 item_name=self.item_name,
                 owner_name=self.owner_name,
                 city=self.city,
                 date=self.date,
                 count=self.count,
                 cost=self.cost,
+                item_id=self.item_id,
             )
         )
 
@@ -109,7 +110,7 @@ class Trade:
 
     @classmethod
     def from_table_row(cls, row):
-        date, owner_city, img_tag, item_name_ru_en, _, count, _, cost = _ritems.findall(row)
+        date, owner_city, img_tag, item_name_en_ru, _, count, _, cost = _ritems.findall(row)
 
         item_id = cls._extract_item_id(img_tag)
         date = cls._extract_date(date)
@@ -129,20 +130,13 @@ class Trade:
         if not count.isdigit() or not cost.isdigit():
             raise EmptyAmountError
 
-        name_parts = tag_split(item_name_ru_en)
-
-        if 'dye' in item_name_ru_en.lower():
-            # mods: ['Str+1', 'Con-1', 'СИЛ+1', 'ВЫН-1']
-            mods = re.findall(r'\w{3}[-\+]\d', item_name_ru_en)
-            if mods:
-                name_parts.append('[%s]' % ' '.join(mods[:2]))
+        name_parts = tag_split(item_name_en_ru)
+        mod = ''
 
         try:
             if len(name_parts) > 2:
                 # example:  ['Baby Kookaburra Ocarina', 'Окарина Детеныша Кукабарры', '+63']
                 item_name_en, item_name_ru, mod = name_parts
-                item_name_en += ' %s' % mod
-                item_name_ru += ' %s' % mod
             elif len(name_parts) > 1:
                 item_name_en, item_name_ru = name_parts
             else:
@@ -154,7 +148,7 @@ class Trade:
         if item_name_en.lower() == 'none' and item_name_ru:
             item_name_en = item_name_ru
 
-        return cls(date, owner_name, city, item_name_en, int(count), int(cost), item_id, bulk)
+        return cls(date, owner_name, city, item_name_en, mod, int(count), int(cost), item_id, bulk)
 
 
 class TradeList:
@@ -177,9 +171,9 @@ class TradeList:
             try:
                 resp = urllib.request.urlopen(addr, timeout=60)
             except (urllib.error.HTTPError, http.client.HTTPException) as exc:
-                retry -= 1
                 if not retry:
                     raise
+                retry -= 1
                 print("Error, retry %s: %r" % (retry, exc))
             else:
                 break
@@ -238,11 +232,12 @@ class TradeList:
                             `trades`
                         WHERE
                             `date` = ?
-                            AND `item_name` = ?
+                            AND `mod` = ?
                             AND `owner_name` = ?
                             AND `cost` = ?
+                            AND `item_id` = ?
                         ''',
-                        (t.date, t.item_name, t.owner_name, t.cost)
+                        (t.date, t.mod, t.owner_name, t.cost, t.item_id)
                     )
 
                     res = cur.fetchone()
@@ -252,7 +247,7 @@ class TradeList:
                         continue
 
                     new_trades.append((
-                        t.item_name,
+                        t.mod,
                         t.owner_name,
                         t.count,
                         t.cost,
@@ -277,7 +272,7 @@ class TradeList:
             cur.executemany(
                 '''
                 INSERT INTO trades (
-                    `item_name`, `owner_name`, `count`, `cost`, `city`, `date`, `type`, `latest`, `item_id`
+                    `mod`, `owner_name`, `count`, `cost`, `city`, `date`, `type`, `latest`, `item_id`
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
@@ -291,7 +286,8 @@ class TradeList:
     def from_local(cls, latest_only=True):
         q = '''
             SELECT
-                `item_name`,
+                `items`.`name`,
+                `mod`,
                 `owner_name`,
                 `count`,
                 `cost`,
@@ -301,6 +297,7 @@ class TradeList:
                 `item_id`
             FROM
                 `trades`
+                INNER JOIN `items` ON `trades`.`item_id` = `items`.`id`
             '''
         if latest_only:
             q += ' WHERE `latest` = 1'
@@ -312,8 +309,8 @@ class TradeList:
             demands = []
             offers = []
             for row in cur:
-                item_name, owner_name, count, cost, city, type_, date, item_id = row
-                trade = Trade(date, owner_name, city, item_name, count, cost, item_id=item_id)
+                item_name, mod, owner_name, count, cost, city, type_, date, item_id = row
+                trade = Trade(date, owner_name, city, item_name, mod or '', count, cost, item_id=item_id)
 
                 if type_ == 1:
                     demands.append(trade)
@@ -348,6 +345,20 @@ def sqlite_conn(filename=SQLITE_DB_FILENAME, autocommit=True):
             conn.commit()
 
 
+def sqlite_init_items(filename=SQLITE_DB_FILENAME):
+    with sqlite_conn(filename=filename) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            CREATE TABLE "items" (
+                `id`    INTEGER NOT NULL PRIMARY KEY,
+                `name`  VARCHAR
+            )
+            '''
+        )
+        cur.execute('CREATE UNIQUE INDEX iID ON `items` (`id`)')
+
+
 def sqlite_init_trades(filename=SQLITE_DB_FILENAME):
     with sqlite_conn(filename=filename) as conn:
         cur = conn.cursor()
@@ -356,6 +367,7 @@ def sqlite_init_trades(filename=SQLITE_DB_FILENAME):
             CREATE TABLE "trades" (
                 `id`    INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 `item_name` VARCHAR,
+                `mod` VARCHAR,`
                 `owner_name`    VARCHAR,
                 `count` INTEGER CHECK (`count` > 0),
                 `cost`  INTEGER CHECK (`cost` > 0),
@@ -363,13 +375,13 @@ def sqlite_init_trades(filename=SQLITE_DB_FILENAME):
                 `type`  INTEGER CHECK (`type` IN (1, 2)),  -- 1 demand (buy), 2 -- offer (sell)
                 `date`  DATETIME,
                 `latest`    BOOLEAN DEFAULT 0,
-                `item_id`   INTEGER
+                FOREIGN KEY(`item_id`) REFERENCES "items"(`id`)
             )
             '''
         )
         cur.execute(
             '''
             CREATE UNIQUE INDEX iTrade
-            ON `trades` (`date`, `owner_name`, `item_name`, `cost`)
+            ON `trades` (`date`, `owner_name`, `mod`, `cost`, `item_id`)
             '''
         )

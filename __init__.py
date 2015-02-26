@@ -1,7 +1,8 @@
-__version__ = '1.3.3'
+__version__ = '1.3.4'
 
 # RPG-CLUB Market Analyzer
 # Changelog:
+# 1.3.4 - strict item naming, fix sleep regression in server
 # 1.3.3 - fix getting dye attributes, add row checks for db, empty cost error now handled
 # 1.3.2 - fix dupe 'stuck' after update, improve errors handling
 # 1.3.1 - fix resetting `latest` status
