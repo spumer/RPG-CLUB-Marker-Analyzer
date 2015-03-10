@@ -44,8 +44,18 @@ def update_market(loop=None):
 
 @asyncio.coroutine
 def dupe(request):
-    dupes = analyze.get_dupes()
-    body = json.dumps([d.to_dict() for d in dupes]).encode()
+    post_data = yield from request.post()
+    ignore = post_data.get('ignore') or None
+    if ignore is not None:
+        ignore = json.loads(ignore)
+
+    dupes, ignored = analyze.get_dupes(ignore_trades=ignore)
+
+    result = [d.to_dict() for d in dupes]
+    if post_data:
+        result = {'dupes': result, 'ignored': ignored}
+
+    body = json.dumps(result).encode()
     return web.Response(body=body)
 
 
