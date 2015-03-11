@@ -86,7 +86,7 @@ def get_dupes(ignore_trades=None):
       offers[o.item_name].sort(key=lambda x: (x.cost, -x.count))  # cost asc, count desc
 
    for demand in sorted(trades.demands, key=lambda x: (x.cost, x.count), reverse=True):  # cost desc, count desc
-      demand_hash = get_trade_hash(o)
+      demand_hash = get_trade_hash(demand)
       if demand_hash in ignore_trades:
          ignored.append(demand_hash)
          continue
