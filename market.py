@@ -367,7 +367,7 @@ def sqlite_init_trades(filename=SQLITE_DB_FILENAME):
             CREATE TABLE "trades" (
                 `id`    INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 `item_name` VARCHAR,
-                `mod` VARCHAR,`
+                `mod` VARCHAR,
                 `owner_name`    VARCHAR,
                 `count` INTEGER CHECK (`count` > 0),
                 `cost`  INTEGER CHECK (`cost` > 0),
@@ -375,6 +375,7 @@ def sqlite_init_trades(filename=SQLITE_DB_FILENAME):
                 `type`  INTEGER CHECK (`type` IN (1, 2)),  -- 1 demand (buy), 2 -- offer (sell)
                 `date`  DATETIME,
                 `latest`    BOOLEAN DEFAULT 0,
+                `item_id` INTEGER,
                 FOREIGN KEY(`item_id`) REFERENCES "items"(`id`)
             )
             '''
