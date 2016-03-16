@@ -1,0 +1,25 @@
+<div class="offer" ng-class="{ old: offerController.isOld(offer.seller.date + '' + offer.buyer.date), 'bg-success': !offerController.isOld(offer.seller.date + '' + offer.buyer.date) }" ng-hide="(offer.equity < minEquity && minEquityOn) || (offer.required_aden > maxRrequired && maxRrequiredOn)">
+	<div class="row">
+		<div class="col-md-2">
+			<strong class="equity"><span ng-bind-html='offer.equity | trisect'></span> </strong><br>
+			<small class="required-aden"><span ng-bind-html='offer.required_aden | trisect'></span></small>
+		</div>
+		<div class="col-md-2">
+			<mark>{{ offer.seller.date*1000 | date:'HH:mm' }}</mark> {{ offer.seller.date*1000 | date:'yyyy.MM.dd' }}<br />
+			<mark>{{ offer.buyer.date*1000 | date:'HH:mm' }}</mark> {{ offer.buyer.date*1000 | date:'yyyy.MM.dd' }}<br />
+		</div>
+		<div class="col-md-3  form-inline  form-group-sm">
+			<p><strong>{{offer.seller.city | noloc}}</strong> <span class="glyphicon glyphicon-arrow-right" aria-hidden="true"></span> <strong>{{offer.buyer.city | noloc}}</strong><br></p>
+			<p><input type="text" readonly='readonly' onClick="this.setSelectionRange(0, this.value.length)" class="form-control" value="/target {{offer.seller.name}}" /> <button id="seller_{{offer.seller.date + '' + offer.buyer.date}}" data-clipboard-text="/target {{offer.seller.name}}" class="copy-me">copy</button></p>
+			<p><input type="text" readonly='readonly' onClick="this.setSelectionRange(0, this.value.length)" class="form-control" value="/target {{offer.buyer.name}}" /> <button id="buyer_{{offer.seller.date + '' + offer.buyer.date}}" data-clipboard-text="/target {{offer.buyer.name}}" class="copy-me">copy</button></p>
+		</div>
+		<div class="col-md-3">
+			<p><mark>{{offer.buy_count}}</mark> <em>{{offer.item_name}}</em></p>
+			<img ng-src="{{offer.img_url}}" />
+		</div>
+		
+		<div class="col-md-2 text-right">
+			<button class="btn btn-default text-uppercase" ng-click="offerController.setAsOld(offer.seller.date + '' + offer.buyer.date, offer);">потрачено <span class="glyphicon glyphicon-question-sign"></span></button>
+		</div>
+	</div>
+</div>

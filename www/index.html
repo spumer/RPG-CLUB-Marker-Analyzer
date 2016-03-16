@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html ng-app="dupe-alert">
+	<head>
+		<meta charset="UTF-8">
+			
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+			
+		<script src="js/jquery-2.1.3.min.js"></script>
+		<script src="js/angular.min.js"></script>
+		<script src="js/angular-sanitize.min.js"></script>
+		<script src="js/bootstrap.min.js"></script>
+		<script src="js/ZeroClipboard.min.js"></script>
+		<script src="js/app.js"></script>
+		
+		<link rel="stylesheet" href="css/bootstrap.min.css">
+		<link rel="stylesheet" href="css/bootstrap-theme.min.css">
+		<link rel="stylesheet" href="css/styles.css">
+		<link rel="shortcut icon" href="/favicon.ico" />
+		
+	</head>
+	<body ng-controller="DupeController as dupe">
+		<div class="container">
+			<header>
+				<div class="row">
+					<div class="col-md-5">
+						<h1  data-clipboard-text="/target asd">Звонкий шекель 1.0.0</h1>
+						<audio id="shekeli" src="shekeli.mp3" preload="auto" autobuffer loop></audio>
+					</div>
+					<div class="col-md-7">
+						<div class="row" style="margin-bottom: 10px;">
+							<div class="col-xs-8 text-right form-inline form-group-sm">
+								<label for="min-equity">Минимальная выгода: </label>
+								<input id="min-equity" class="form-control" type="text" ng-model="minEquity" ng-change="savePrefs()" />
+								<input type="checkbox" ng-model="minEquityOn" ng-change="savePrefs()" />
+							</div>
+							<div class="col-xs-4">
+								<em class="hidden-offers">скрыто: {{(dupe.offers | filter:isHiddenByEquity).length}}</em>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-xs-8 text-right form-inline form-group-sm">
+								<label for="max-required">Максимальное вложение: </label>
+								<input id="max-required" class="form-control" type="text" ng-init="20000000" ng-model="maxRrequired" ng-change="savePrefs()" />
+								<input type="checkbox" ng-model="maxRrequiredOn" ng-change="savePrefs()" />
+							</div>
+							<div class="col-xs-4">
+								<em class="hidden-offers">скрыто: {{(dupe.offers | filter:isHiddenByRequired).length}}</em>
+							</div>
+						</div>
+					</div>
+				</div>
+				
+			</header>
+			<div class="progress">
+				<div class="progress-bar progress-bar-success" role="progressbar" style="width: 0%;">
+					<span class="sr-only">60% Complete</span>
+				</div>
+			</div>
+			<dupe-offer ng-repeat="offer in dupe.offers | orderBy:['old', '-equity']"></dupe-offer>
+		</div>
+		<div class="modal fade" id="unknownOffers" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+						<h4 class="modal-title" id="exampleModalLabel">Внимание!</h4>
+					</div>
+					<div class="modal-body">
+						<h1>Обнаружен прирост глупых гоев.</h1>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-default" data-dismiss="modal">Ладно</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
